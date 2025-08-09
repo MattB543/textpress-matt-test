@@ -5,5 +5,10 @@ pydantic>=2.7.0
 SQLAlchemy>=2.0.30
 psycopg2-binary>=2.9.9
 python-dotenv>=1.0.1
-textpress>=0
+requests>=2.32.0
+markdown2>=2.5.4
+markdownify>=0.13.1
+mammoth>=1.10.0
+Jinja2>=3.1.6
+htmlmin>=0.1.12
 

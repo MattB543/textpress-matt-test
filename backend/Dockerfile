@@ -5,8 +5,17 @@ WORKDIR /app
 COPY pyproject.toml /app/pyproject.toml
 COPY app /app/app
 
+# System libs commonly required by markdown/html tooling (weasyprint/opencv/fonts etc.)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
+      libffi8 libxml2 libxslt1.1 libjpeg62-turbo libgl1 \
+      fonts-dejavu-core ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
 ENV UV_LINK_MODE=copy
-RUN uv sync --frozen
+# Allow resolution at build time (no uv.lock required)
+RUN uv sync
 
 ENV PORT=8000
 EXPOSE 8000
