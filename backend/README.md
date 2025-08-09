@@ -23,4 +23,14 @@ uv sync
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
+Deploy to DigitalOcean App Platform (source deploy):
+
+- Ensure these files exist in `backend/`:
+  - `requirements.txt` (pip deps)
+  - `Procfile` (web: uvicorn app.main:app --host 0.0.0.0 --port $PORT)
+  - `runtime.txt` (python-3.11.9)
+- App Platform will detect Python, install `requirements.txt`, and use the Procfile.
+- Set env vars: `DATABASE_URL`, `PUBLIC_BASE_URL`, `MAX_UPLOAD_MB` (optional)
+- Health check: GET `/healthz`
+
 DB migrations: not required for MVP (single table auto-created). `DATABASE_URL` is required for this Postgres-only variant.
