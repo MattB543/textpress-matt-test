@@ -1,4 +1,4 @@
-# app/process_cli.py - SIMPLIFIED FOR LINUX DEPLOYMENT
+# app/process_cli.py - FIXED TO RUN AS MODULE
 from __future__ import annotations
 
 import asyncio
@@ -52,9 +52,9 @@ async def process_with_cli(
         else:
             raise ValueError("No input provided")
         
-        # Build command - simpler for Linux
+        # Build command - run as Python module instead of CLI command
         cmd = [
-            "textpress",
+            "python", "-m", "textpress.cli.cli_main",  # Run as module
             "--work_root", str(temp_path),
             "format",
             input_arg
@@ -67,7 +67,7 @@ async def process_with_cli(
         
         logger.info("Running command: %s", " ".join(cmd))
         
-        # On Linux, we can use the async subprocess directly
+        # Run the subprocess
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -85,7 +85,7 @@ async def process_with_cli(
         except asyncio.TimeoutError:
             raise RuntimeError("Textpress CLI timed out after 30 seconds")
         except FileNotFoundError:
-            raise RuntimeError("textpress CLI not found")
+            raise RuntimeError("Python or textpress module not found")
         
         # Find output files
         workspace_dir = temp_path / "workspace"

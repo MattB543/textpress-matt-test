@@ -41,4 +41,32 @@ export const api = {
     console.log("[api.convert] success payload", json);
     return json;
   },
+  async combine({
+    doc_ids,
+    titles,
+    combined_title,
+  }: {
+    doc_ids: string[];
+    titles?: string[];
+    combined_title?: string;
+  }): Promise<{
+    id: string;
+    public_url: string;
+    component_ids: string[];
+    component_urls: string[];
+  }> {
+    const form = new FormData();
+    doc_ids.forEach((id) => form.append("doc_ids", id));
+    titles?.forEach((t) => form.append("titles", t));
+    if (combined_title) form.append("combined_title", combined_title);
+
+    const res = await fetch(`${API_BASE}/combine`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      throw new Error(`Combine failed: ${res.status}`);
+    }
+    return res.json();
+  },
 };

@@ -8,10 +8,15 @@ CREATE TABLE IF NOT EXISTS public.documents (
   source_type  text,
   input_name   text,
   html_body    text NOT NULL,
-  md_body      text
+  md_body      text,
+  parent_doc_id text,
+  doc_metadata jsonb
 );
 
 -- Helpful index for recent listings (future use)
 CREATE INDEX IF NOT EXISTS documents_created_at_idx ON public.documents (created_at DESC);
+
+-- Index for finding child documents
+CREATE INDEX IF NOT EXISTS documents_parent_doc_id_idx ON public.documents (parent_doc_id);
 
 

@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DropZone } from "./DropZone";
 import { InputTabs } from "./InputTabs";
 import { api } from "../utils/api";
+import { CombineReports } from "./CombineReports";
 
 export function App() {
-  type Mode = "file" | "text" | "url";
+  type Mode = "file" | "text" | "url" | "combine";
   const [mode, setMode] = useState<Mode>("file");
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState("");
@@ -112,18 +113,27 @@ export function App() {
                 style={{ overflow: "hidden" }}
               />
             )}
+            {mode === "combine" && (
+              <CombineReports
+                onComplete={(result) => {
+                  setPublicUrl(result.public_url);
+                }}
+              />
+            )}
           </div>
         </div>
 
-        <div className="row cta">
-          <button
-            className="btn btn-primary"
-            onClick={onSubmit}
-            disabled={busy}
-          >
-            {busy ? "Converting…" : "Convert & Publish"}
-          </button>
-        </div>
+        {mode !== "combine" && (
+          <div className="row cta">
+            <button
+              className="btn btn-primary"
+              onClick={onSubmit}
+              disabled={busy}
+            >
+              {busy ? "Converting…" : "Convert & Publish"}
+            </button>
+          </div>
+        )}
 
         <div className="spacer" />
 

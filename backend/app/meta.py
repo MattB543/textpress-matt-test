@@ -6,7 +6,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, String, Text, create_engine, func
+from sqlalchemy import Column, DateTime, String, Text, JSON, create_engine, func
 from sqlalchemy.orm import DeclarativeBase, Session
 from sqlalchemy.pool import NullPool
 import logging
@@ -24,6 +24,8 @@ class Document(Base):
     input_name = Column(String, nullable=True)
     html_body = Column(Text, nullable=False)
     md_body = Column(Text, nullable=True)
+    parent_doc_id = Column(String, nullable=True)
+    doc_metadata = Column(JSON, nullable=True)
 
 class MetaStore:
     def __init__(self, engine_url: str):
@@ -49,6 +51,9 @@ class MetaStore:
         source_type: str,
         html_body: str,
         md_body: str | None,
+        *,
+        parent_doc_id: str | None = None,
+        doc_metadata: dict | None = None,
     ) -> None:
         # Sanitize text
         html_body = (html_body or "").replace("\x00", "")
@@ -60,7 +65,9 @@ class MetaStore:
                 id=uid,
                 source_type=source_type,
                 html_body=html_body,
-                md_body=md_body
+                md_body=md_body,
+                parent_doc_id=parent_doc_id,
+                doc_metadata=doc_metadata,
             )
             session.add(doc)
             session.commit()

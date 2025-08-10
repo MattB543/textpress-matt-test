@@ -1,4 +1,4 @@
-type Mode = "file" | "text" | "url";
+type Mode = "file" | "text" | "url" | "combine";
 
 export function InputTabs({
   mode,
@@ -32,6 +32,14 @@ export function InputTabs({
         onClick={() => onChange("text")}
       >
         Paste Text
+      </button>
+      <button
+        className={`tab-btn ${mode === "combine" ? "active" : ""}`}
+        role="tab"
+        aria-selected={mode === "combine"}
+        onClick={() => onChange("combine")}
+      >
+        Combine Reports
       </button>
     </div>
   );
