@@ -106,6 +106,9 @@ async def api_convert(
     file: UploadFile | None = File(default=None),
     text: str | None = Form(default=None),
     url: str | None = Form(default=None),
+    add_title: bool = Form(default=False),
+    add_classes: str | None = Form(default=None),
+    no_minify: bool = Form(default=False),
 ):
     logger.info(
         "POST /api/convert from origin=%s ua=%s",
@@ -153,7 +156,12 @@ async def api_convert(
     # Render HTML and (optionally) Markdown
     try:
         logger.info("Starting convert_and_render for source=%s", input_path)
-        result = await convert_and_render(input_path)
+        result = await convert_and_render(
+            input_path,
+            add_title=add_title,
+            add_classes=(add_classes or None),
+            no_minify=no_minify,
+        )
         logger.info(
             "Conversion complete: source_type=%s, html_len=%d, md_len=%s",
             result.source_type,
