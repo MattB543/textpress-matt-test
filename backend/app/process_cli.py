@@ -1,10 +1,12 @@
-# app/process_cli.py - FIXED ARGUMENT ORDER
+# app/process_cli.py - FIXED WITH SIGUSR1 WORKAROUND
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
+import signal
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -12,6 +14,10 @@ from typing import Any
 from fastapi import UploadFile
 
 logger = logging.getLogger("textpress.backend.process_cli")
+
+# Windows compatibility: Add SIGUSR1 if it doesn't exist
+if not hasattr(signal, 'SIGUSR1'):
+    signal.SIGUSR1 = signal.SIGTERM  # type: ignore
 
 
 async def process_with_cli(
@@ -54,15 +60,14 @@ async def process_with_cli(
         else:
             raise ValueError("No input provided")
         
-        # Build the command - FIXED ORDER: global args before subcommand
+        # Build the command
         cmd = [
             "uv", "run", "textpress",
-            "--work_root", str(temp_path),  # Global arg BEFORE subcommand
-            "format",  # Subcommand
-            input_arg  # Subcommand argument
+            "--work_root", str(temp_path),
+            "format",
+            input_arg
         ]
         
-        # Add subcommand-specific options
         if add_classes:
             cmd.extend(["--add_classes", add_classes])
         if no_minify:
@@ -70,17 +75,52 @@ async def process_with_cli(
         
         logger.info("Running command: %s", " ".join(cmd))
         
+        # Create a Python wrapper script that patches signal before importing textpress
+        wrapper_script = temp_path / "wrapper.py"
+        wrapper_code = '''
+import signal
+import sys
+
+# Windows compatibility
+if not hasattr(signal, 'SIGUSR1'):
+    signal.SIGUSR1 = signal.SIGTERM
+
+# Now import and run textpress
+from textpress.cli.cli_main import main
+if __name__ == "__main__":
+    main()
+'''
+        wrapper_script.write_text(wrapper_code)
+        
+        # Run via the wrapper script instead of directly
+        wrapper_cmd = [
+            "uv", "run", "python", str(wrapper_script),
+            "--work_root", str(temp_path),
+            "format",
+            input_arg
+        ]
+        
+        if add_classes:
+            wrapper_cmd.extend(["--add_classes", add_classes])
+        if no_minify:
+            wrapper_cmd.append("--no_minify")
+        
+        logger.info("Running wrapper command: %s", " ".join(wrapper_cmd))
+        
         # Define a synchronous function to run the subprocess
         def run_subprocess():
             try:
+                # Set PYTHONPATH to ensure the signal patch is loaded
+                env = os.environ.copy()
+                
                 result = subprocess.run(
-                    cmd,
+                    wrapper_cmd,
                     capture_output=True,
                     text=True,
                     encoding='utf-8',
                     cwd=os.getcwd(),
-                    env={**os.environ},
-                    timeout=30  # 30 second timeout
+                    env=env,
+                    timeout=30
                 )
                 return result
             except subprocess.TimeoutExpired as e:
@@ -91,7 +131,7 @@ async def process_with_cli(
                     "textpress CLI not found. Install it with: uv add textpress"
                 )
         
-        # Run the subprocess in a thread pool (works on Windows!)
+        # Run the subprocess in a thread pool
         try:
             result = await asyncio.to_thread(run_subprocess)
             
@@ -101,7 +141,9 @@ async def process_with_cli(
                 error_msg = result.stderr or result.stdout or "Unknown error"
                 raise RuntimeError(f"Textpress CLI failed: {error_msg}")
                 
-            logger.info("CLI stdout: %s", result.stdout[:500])  # Log first 500 chars
+            logger.info("CLI completed successfully")
+            if result.stdout:
+                logger.debug("CLI stdout: %s", result.stdout[:500])
             
         except Exception as e:
             logger.exception("Failed to run textpress CLI")
@@ -120,8 +162,9 @@ async def process_with_cli(
         if not html_files or not md_files:
             all_files = list(workspace_dir.rglob("*"))
             logger.info(f"Workspace contains {len(all_files)} files total")
-            for f in all_files[:20]:  # Log first 20 files
-                logger.info(f"  - {f.relative_to(temp_path)}")
+            for f in all_files[:20]:
+                if f.is_file():
+                    logger.info(f"  - {f.relative_to(temp_path)}")
         
         if not html_files:
             # Try alternative locations
@@ -129,7 +172,7 @@ async def process_with_cli(
             if not html_files:
                 all_files = list(temp_path.rglob("*"))
                 raise RuntimeError(
-                    f"No HTML output generated. Files in temp dir: {[str(f.relative_to(temp_path)) for f in all_files[:30]]}"
+                    f"No HTML output generated. Files in temp dir: {[str(f.relative_to(temp_path)) for f in all_files if f.is_file()][:30]}"
                 )
         
         # Read the results
