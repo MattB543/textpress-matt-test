@@ -1,4 +1,4 @@
-# Dockerfile
+# Dockerfile - Fixed uv path
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -10,8 +10,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Add uv to PATH
-ENV PATH="/root/.cargo/bin:$PATH"
+# Add uv to PATH (it installs to /root/.local/bin)
+ENV PATH="/root/.local/bin:$PATH"
 
 # Copy project files
 COPY pyproject.toml .

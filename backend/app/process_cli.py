@@ -1,12 +1,10 @@
-# app/process_cli.py - FIXED WITH SIGUSR1 WORKAROUND
+# app/process_cli.py - SIMPLIFIED FOR LINUX DEPLOYMENT
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
-import signal
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -14,10 +12,6 @@ from typing import Any
 from fastapi import UploadFile
 
 logger = logging.getLogger("textpress.backend.process_cli")
-
-# Windows compatibility: Add SIGUSR1 if it doesn't exist
-if not hasattr(signal, 'SIGUSR1'):
-    signal.SIGUSR1 = signal.SIGTERM  # type: ignore
 
 
 async def process_with_cli(
@@ -29,10 +23,8 @@ async def process_with_cli(
 ) -> dict[str, Any]:
     """
     Process input using textpress CLI tool via subprocess.
-    Works on Windows by using asyncio.to_thread with regular subprocess.
     """
     
-    # Use context manager for automatic cleanup
     with tempfile.TemporaryDirectory(prefix="tp-") as temp_dir:
         temp_path = Path(temp_dir)
         
@@ -60,9 +52,9 @@ async def process_with_cli(
         else:
             raise ValueError("No input provided")
         
-        # Build the command
+        # Build command - simpler for Linux
         cmd = [
-            "uv", "run", "textpress",
+            "textpress",
             "--work_root", str(temp_path),
             "format",
             input_arg
@@ -75,114 +67,37 @@ async def process_with_cli(
         
         logger.info("Running command: %s", " ".join(cmd))
         
-        # Create a Python wrapper script that patches signal before importing textpress
-        wrapper_script = temp_path / "wrapper.py"
-        wrapper_code = '''
-import signal
-import sys
-
-# Windows compatibility
-if not hasattr(signal, 'SIGUSR1'):
-    signal.SIGUSR1 = signal.SIGTERM
-
-# Now import and run textpress
-from textpress.cli.cli_main import main
-if __name__ == "__main__":
-    main()
-'''
-        wrapper_script.write_text(wrapper_code)
-        
-        # Run via the wrapper script instead of directly
-        wrapper_cmd = [
-            "uv", "run", "python", str(wrapper_script),
-            "--work_root", str(temp_path),
-            "format",
-            input_arg
-        ]
-        
-        if add_classes:
-            wrapper_cmd.extend(["--add_classes", add_classes])
-        if no_minify:
-            wrapper_cmd.append("--no_minify")
-        
-        logger.info("Running wrapper command: %s", " ".join(wrapper_cmd))
-        
-        # Define a synchronous function to run the subprocess
-        def run_subprocess():
-            try:
-                # Set PYTHONPATH to ensure the signal patch is loaded
-                env = os.environ.copy()
-                
-                result = subprocess.run(
-                    wrapper_cmd,
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8',
-                    cwd=os.getcwd(),
-                    env=env,
-                    timeout=30
-                )
-                return result
-            except subprocess.TimeoutExpired as e:
-                logger.error("Command timed out: %s", e)
-                raise RuntimeError(f"Textpress CLI timed out after 30 seconds")
-            except FileNotFoundError:
-                raise RuntimeError(
-                    "textpress CLI not found. Install it with: uv add textpress"
-                )
-        
-        # Run the subprocess in a thread pool
+        # On Linux, we can use the async subprocess directly
         try:
-            result = await asyncio.to_thread(run_subprocess)
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env={**os.environ}
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
             
-            if result.returncode != 0:
-                logger.error("CLI stdout: %s", result.stdout)
-                logger.error("CLI stderr: %s", result.stderr)
-                error_msg = result.stderr or result.stdout or "Unknown error"
+            if proc.returncode != 0:
+                error_msg = stderr.decode() if stderr else stdout.decode() if stdout else "Unknown error"
+                logger.error("CLI failed: %s", error_msg)
                 raise RuntimeError(f"Textpress CLI failed: {error_msg}")
                 
-            logger.info("CLI completed successfully")
-            if result.stdout:
-                logger.debug("CLI stdout: %s", result.stdout[:500])
-            
-        except Exception as e:
-            logger.exception("Failed to run textpress CLI")
-            raise
+        except asyncio.TimeoutError:
+            raise RuntimeError("Textpress CLI timed out after 30 seconds")
+        except FileNotFoundError:
+            raise RuntimeError("textpress CLI not found")
         
-        # The textpress CLI outputs to workspace/docs/
+        # Find output files
         workspace_dir = temp_path / "workspace"
-        
-        # Find all HTML and MD files recursively
         html_files = list(workspace_dir.rglob("*.html"))
         md_files = list(workspace_dir.rglob("*.md"))
         
-        logger.info(f"Found {len(html_files)} HTML files and {len(md_files)} MD files")
-        
-        # Log workspace contents for debugging
-        if not html_files or not md_files:
-            all_files = list(workspace_dir.rglob("*"))
-            logger.info(f"Workspace contains {len(all_files)} files total")
-            for f in all_files[:20]:
-                if f.is_file():
-                    logger.info(f"  - {f.relative_to(temp_path)}")
-        
         if not html_files:
-            # Try alternative locations
-            html_files = list(temp_path.rglob("*.html"))
-            if not html_files:
-                all_files = list(temp_path.rglob("*"))
-                raise RuntimeError(
-                    f"No HTML output generated. Files in temp dir: {[str(f.relative_to(temp_path)) for f in all_files if f.is_file()][:30]}"
-                )
-        
-        # Read the results
-        html_content = html_files[0].read_text(encoding='utf-8')
-        md_content = md_files[0].read_text(encoding='utf-8') if md_files else None
-        
-        logger.info(f"Successfully read HTML ({len(html_content)} chars) and MD ({len(md_content) if md_content else 0} chars)")
+            all_files = list(temp_path.rglob("*"))
+            raise RuntimeError(f"No HTML output. Files: {[f.name for f in all_files if f.is_file()]}")
         
         return {
-            "html": html_content,
-            "markdown": md_content,
+            "html": html_files[0].read_text(encoding='utf-8'),
+            "markdown": md_files[0].read_text(encoding='utf-8') if md_files else None,
             "source_type": source_type
         }
