@@ -15,6 +15,11 @@ export function DropZone({ onFile, accept }: Props) {
       e.stopPropagation();
       setDrag(false);
       const f = e.dataTransfer.files?.[0];
+      console.log("[DropZone] onDrop", {
+        hasFile: !!f,
+        name: f?.name,
+        size: f?.size,
+      });
       if (f) onFile(f);
     },
     [onFile]
@@ -23,6 +28,11 @@ export function DropZone({ onFile, accept }: Props) {
   const onSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const f = e.target.files?.[0];
+      console.log("[DropZone] onSelect", {
+        hasFile: !!f,
+        name: f?.name,
+        size: f?.size,
+      });
       if (f) onFile(f);
     },
     [onFile]

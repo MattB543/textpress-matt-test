@@ -22,6 +22,7 @@ export function App() {
   async function onSubmit() {
     reset();
     try {
+      console.log("[App] onSubmit start", { mode });
       // Validate based on selected mode
       if (mode === "file") {
         if (!file) throw new Error("Please select a .docx/.md/.txt file");
@@ -43,10 +44,13 @@ export function App() {
       setBusy(true);
       const res = await api.convert({ file, text, url });
       setPublicUrl(res.public_url);
+      console.log("[App] convert success", res);
     } catch (e: any) {
       setError(e?.message ?? "Something went wrong");
+      console.error("[App] convert error", e);
     } finally {
       setBusy(false);
+      console.log("[App] onSubmit end");
     }
   }
 

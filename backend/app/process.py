@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 import signal
@@ -67,10 +68,13 @@ async def convert_and_render(input_path_or_url: Path | str) -> ConvertResult:
     Convert input to Markdown and render HTML via Textpress template.
     Returns HTML and Markdown (if available).
     """
+    logger = logging.getLogger("textpress.backend.process")
+    logger.info("convert_and_render start: %s", str(input_path_or_url))
     # Prepare action input (accepts Url or Path)
     src = Url(str(input_path_or_url)) if isinstance(input_path_or_url, str) and is_url(str(input_path_or_url)) else Path(input_path_or_url)  # type: ignore[arg-type]
 
     if USE_TEXTPRESS:
+        logger.info("Using full Textpress stack")
         # Ensure kash runtime workspace is available for actions
         ws_root = Path(os.environ.get("WORK_ROOT", "./textpress")).resolve()
         ws_path = ws_root / "workspace"
@@ -91,14 +95,17 @@ async def convert_and_render(input_path_or_url: Path | str) -> ConvertResult:
         source_type = (
             "url" if is_url(str(input_path_or_url)) else Path(input_path_or_url).suffix.lower().lstrip(".")
         )
+        logger.info("Textpress conversion done: html_len=%d md_len=%s", len(html), (len(markdown) if markdown else None))
         return ConvertResult(html=html, markdown=markdown, source_type=source_type or "unknown")
     else:
+        logger.info("Using fallback markdown-only pipeline")
         # Fallback: treat URL as unsupported, otherwise parse text/markdown from file
         if isinstance(input_path_or_url, str) and is_url(str(input_path_or_url)):
             raise ValueError("URL inputs require full textpress stack; not available in fallback mode")
         p = Path(input_path_or_url)
         md = p.read_text(encoding="utf-8", errors="ignore")
         result = simple_format_markdown(md)
+        logger.info("Fallback conversion done: html_len=%d md_len=%d", len(result.html), len(result.markdown))
         return ConvertResult(html=result.html, markdown=result.markdown, source_type=result.source_type)
 
 

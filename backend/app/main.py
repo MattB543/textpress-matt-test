@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import uuid
@@ -7,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 import boto3
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -34,14 +35,37 @@ def max_upload_bytes() -> int:
 
 load_dotenv()  # Load .env if present for local dev
 
+# Configure logger
+logger = logging.getLogger("textpress.backend")
+if not logger.handlers:
+    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
+logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+
 app = FastAPI(title="Textpress Backend", version="0.1.0")
+
+cors_env = os.environ.get("CORS_ALLOW_ORIGINS", "*").strip()
+allow_origins = ["*"] if cors_env == "*" or cors_env == "" else [o.strip() for o in cors_env.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allow_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+logger.info("FastAPI app initialized; CORS allow_origins=%s credentials=%s methods=* headers=*", allow_origins, False)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info("REQ %s %s", request.method, request.url.path)
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("Unhandled error for %s %s", request.method, request.url.path)
+        raise
+    logger.info("RES %s %s -> %s", request.method, request.url.path, getattr(response, "status_code", "?"))
+    return response
 
 meta_store: Optional[MetaStore] = make_meta_store()
 
@@ -53,10 +77,23 @@ def healthz() -> dict:
 
 @app.post("/api/convert", response_model=ConvertResponse)
 async def api_convert(
+    request: Request,
     file: UploadFile | None = File(default=None),
     text: str | None = Form(default=None),
     url: str | None = Form(default=None),
 ):
+    logger.info(
+        "POST /api/convert from origin=%s ua=%s",
+        request.headers.get("origin"),
+        request.headers.get("user-agent"),
+    )
+    logger.info(
+        "Incoming payload: file=%s, file_size=%s, text_len=%s, url=%s",
+        getattr(file, "filename", None),
+        getattr(file, "size", None),  # UploadFile may not have size; kept for visibility
+        len(text) if text else 0,
+        (url or "").strip()[:200],
+    )
     if not (file or (text and text.strip()) or (url and url.strip())):
         raise HTTPException(status_code=400, detail="Provide file or text or url")
 
@@ -73,22 +110,36 @@ async def api_convert(
         if suffix not in {".docx", ".md", ".markdown", ".txt"}:
             raise HTTPException(status_code=400, detail="Unsupported file type")
         p = temp_dir / f"upload{suffix}"
+        logger.info("Saving uploaded file to %s", p)
+        body = await file.read()
         with open(p, "wb") as f:
-            f.write(await file.read())
+            f.write(body)
+        logger.info("Saved file bytes=%d", len(body))
         input_path = p
     elif text and text.strip():
         p = temp_dir / "input.md"
+        logger.info("Writing text input to %s (len=%d)", p, len(text))
         p.write_text(text)
         input_path = p
     else:
         input_path = (url or "").strip()
+        logger.info("Processing URL input: %s", (url or "").strip())
 
     # Render HTML and (optionally) Markdown
     try:
+        logger.info("Starting convert_and_render for source=%s", input_path)
         result = await convert_and_render(input_path)
+        logger.info(
+            "Conversion complete: source_type=%s, html_len=%d, md_len=%s",
+            result.source_type,
+            len(result.html or ""),
+            (len(result.markdown) if result.markdown else None),
+        )
     except ValueError as e:
+        logger.exception("Conversion validation error: %s", e)
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:  # noqa: BLE001
+        logger.exception("Unexpected conversion error")
         raise HTTPException(status_code=500, detail="Conversion failed") from e
 
     # Generate stable random id
@@ -98,13 +149,18 @@ async def api_convert(
         uid = uuid.uuid4().hex
     # Persist to Postgres
     if meta_store is None:
+        logger.error("DATABASE_URL is not configured; cannot persist document")
         raise HTTPException(status_code=500, detail="Database not configured")
     try:
+        logger.info("Persisting document uid=%s to database", uid)
         meta_store.create_document(uid=uid, source_type=result.source_type, html_body=result.html, md_body=result.markdown)
+        logger.info("Persisted document uid=%s", uid)
     except Exception as e:  # noqa: BLE001
+        logger.exception("Failed to save document uid=%s", uid)
         raise HTTPException(status_code=500, detail="Failed to save document") from e
 
     public_url = f"{get_public_base_url()}/d/{uid}.html"
+    logger.info("Returning response uid=%s public_url=%s", uid, public_url)
     return ConvertResponse(id=uid, public_url=public_url)
 
 
