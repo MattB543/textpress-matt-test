@@ -10,15 +10,13 @@ dependencies = [
   "pydantic>=2.7.0",
   "SQLAlchemy>=2.0.30",
   "psycopg2-binary>=2.9.9",
-  "textpress>=0",
+  "textpress>=0.1.0",  # ← Update this line to specify minimum version
   "python-dotenv>=1.0.1",
+  "httpx>=0.28.0",  # ← Add this line for HTTP client
 ]
 
 [tool.uv]
 package = false
 
-#[tool.uv.sources]
-# Use the published package by default; uncomment below to develop against local textpress
-# textpress = { path = "..", editable = true }
-
-
+[tool.uv.sources]
+textpress = { git = "https://github.com/jlevy/textpress.git" }

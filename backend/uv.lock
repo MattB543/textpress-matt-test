@@ -1453,8 +1453,8 @@ wheels = [
 
 [[package]]
 name = "kash-docs"
-version = "0.1.15"
-source = { registry = "https://pypi.org/simple" }
+version = "0.1.16.dev13+87523e6"
+source = { git = "https://github.com/jlevy/kash-docs.git#87523e627e870792aedc9aa822ca432601fcefff" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "boto3" },
@@ -1476,10 +1476,6 @@ dependencies = [
     { name = "weasyprint" },
     { name = "wikipedia-api" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/00/06b19300094ad822c44d60aebe92fc41f7b00271514f1d2d34e0e7160132/kash_docs-0.1.15.tar.gz", hash = "sha256:9dfe55fd32777314217c81067d55119979a2e914afdb462e88b5bcb4907850b4", size = 2852127, upload-time = "2025-08-01T06:46:29.348Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/05/b8/8a0acfad3aab79f0f9b6d3bbb1245799d9d1ce8cbf663d10a908f3365863/kash_docs-0.1.15-py3-none-any.whl", hash = "sha256:ec9bd7ef9f3113b936be80a9e67829db58cfa0fb41e755e4125e0bc4a402e0b8", size = 1389487, upload-time = "2025-08-01T06:46:28.112Z" },
-]
 
 [package.optional-dependencies]
 full = [
@@ -1491,8 +1487,8 @@ full = [
 
 [[package]]
 name = "kash-shell"
-version = "0.3.28"
-source = { registry = "https://pypi.org/simple" }
+version = "0.3.29.dev31+27d7392"
+source = { git = "https://github.com/jlevy/kash.git#27d7392c0d574e772e7bf84494a3370c088da4cf" }
 dependencies = [
     { name = "aiolimiter" },
     { name = "anyio" },
@@ -1540,6 +1536,7 @@ dependencies = [
     { name = "rich" },
     { name = "rich-argparse" },
     { name = "ripgrepy" },
+    { name = "selectolax" },
     { name = "send2trash" },
     { name = "setproctitle" },
     { name = "sidematter-format" },
@@ -1552,10 +1549,6 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uvicorn" },
     { name = "xonsh" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ef/9e/e69f47111c2002dda321c219b6bb2727f4d0d518957af4a4852cbcd3d404/kash_shell-0.3.28.tar.gz", hash = "sha256:d7b82166c20e72760ef6772e7b23eac311e2b99ff8d987553b671418bf6eb162", size = 630830, upload-time = "2025-08-03T21:04:20.299Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/13/47/89e059bb18550b6da5a4d7d8006a99b3e912fceb392d4ce2e9ba9f7da214/kash_shell-0.3.28-py3-none-any.whl", hash = "sha256:90dff93dcb1739b3ca9715f6807f3a8c8e59feb634f662d283c88fcbf1e15145", size = 558720, upload-time = "2025-08-03T21:04:19.106Z" },
 ]
 
 [[package]]
@@ -3806,17 +3799,14 @@ wheels = [
 
 [[package]]
 name = "textpress"
-version = "0.1.1"
-source = { registry = "https://pypi.org/simple" }
+version = "0.1.2.dev2+be404b0"
+source = { git = "https://github.com/jlevy/textpress.git#be404b04ad709405ed657c7e55de8bddeafa7258" }
 dependencies = [
     { name = "clideps" },
     { name = "flowmark" },
     { name = "kash-docs", extra = ["full"] },
     { name = "rich" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ae/74/2c096888720c5dd3d668cb0390a6b6c9727b41875f405f2511013fd3c354/textpress-0.1.1.tar.gz", hash = "sha256:6fd36da0757ec4b089a8bf365be54c3cdd3861db14e657b923538fabfd9f8c45", size = 246120, upload-time = "2025-08-01T07:15:02.865Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/e1/1fcca1081afddffa7e0d51adaff1808cbe8f9e40cf41ab6ae65342dba48b/textpress-0.1.1-py3-none-any.whl", hash = "sha256:57a15c80fd83c31d4505323ccba012453d8bde599917d3b3b6290c9342fd7c7f", size = 34802, upload-time = "2025-08-01T07:15:01.747Z" },
+    { name = "sidematter-format" },
 ]
 
 [[package]]
@@ -3825,6 +3815,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "psycopg2-binary" },
     { name = "pydantic" },
     { name = "python-dotenv" },
@@ -3837,12 +3828,13 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.111.0" },
+    { name = "httpx", specifier = ">=0.28.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.9" },
     { name = "pydantic", specifier = ">=2.7.0" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "sqlalchemy", specifier = ">=2.0.30" },
-    { name = "textpress", specifier = ">=0" },
+    { name = "textpress", git = "https://github.com/jlevy/textpress.git" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
 

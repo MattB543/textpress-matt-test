@@ -1,20 +1,22 @@
+# app/meta.py - SIMPLIFIED VERSION
 from __future__ import annotations
 
+# pyright: reportMissingImports=false
+
 import os
-from dataclasses import dataclass, field
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, String, Text, create_engine, func, event
+from sqlalchemy import Column, DateTime, String, Text, create_engine, func
 from sqlalchemy.orm import DeclarativeBase, Session
-
+from sqlalchemy.pool import NullPool
+import logging
 
 class Base(DeclarativeBase):
     pass
 
-
 class Document(Base):
     __tablename__ = "documents"
-
+    
     id = Column(String, primary_key=True)
     status = Column(String, nullable=False, default="published")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -23,89 +25,71 @@ class Document(Base):
     html_body = Column(Text, nullable=False)
     md_body = Column(Text, nullable=True)
 
-
-@dataclass
 class MetaStore:
-    """Thin wrapper around a SQLAlchemy engine used to persist documents.
-
-    The engine is created lazily and reused across requests. A short
-    connection timeout is configured to avoid long hangs when the database is
-    unreachable in hosted environments.
-    """
-
-    engine_url: str
-    _engine: object | None = field(default=None, init=False, repr=False)
-
-    def _get_engine(self):  # type: ignore[override]
-        if self._engine is None:
-            # psycopg2 supports connect_timeout (in seconds)
-            self._engine = create_engine(
-                self.engine_url,
-                pool_pre_ping=True,
-                connect_args={"connect_timeout": 5},
-            )
-            # Ensure a reasonable statement timeout to avoid long-running inserts (ms)
-            try:
-                import os
-
-                timeout_ms = int(os.environ.get("PG_STATEMENT_TIMEOUT_MS", "120000"))
-
-                @event.listens_for(self._engine, "connect")
-                def _set_pg_statement_timeout(dbapi_connection, connection_record):  # type: ignore[no-redef]
-                    try:
-                        cursor = dbapi_connection.cursor()
-                        cursor.execute(f"SET statement_timeout TO {timeout_ms}")
-                        cursor.close()
-                    except Exception:
-                        # Best-effort; if it fails, continue without altering server setting
-                        try:
-                            cursor.close()
-                        except Exception:
-                            pass
-            except Exception:
-                # Ignore failures setting timeout
-                pass
-            # Ensure tables exist once per process
-            Base.metadata.create_all(self._engine)
-        return self._engine
-
+    def __init__(self, engine_url: str):
+        self.engine_url = engine_url
+        # Use NullPool for better connection management in web apps
+        self.engine = create_engine(
+            engine_url, 
+            poolclass=NullPool,
+            connect_args={"connect_timeout": 5}
+        )
+        Base.metadata.create_all(self.engine)
+        self.logger = logging.getLogger("textpress.backend.meta")
+        self.logger.info("DB engine initialized url=%s", self._redact(engine_url))
+    
     def test_connection(self) -> None:
-        engine = self._get_engine()
-        # Use driver SQL to avoid requiring ORM mappings
-        with engine.connect() as conn:  # type: ignore[attr-defined]
+        with self.engine.connect() as conn:
             conn.exec_driver_sql("SELECT 1")
-
+        self.logger.info("DB test connection OK")
+    
     def create_document(
         self,
-        *,
         uid: str,
         source_type: str,
         html_body: str,
         md_body: str | None,
     ) -> None:
-        engine = self._get_engine()
-        # Sanitize text to avoid DB text encoding issues (e.g., NUL bytes)
-        def _sanitize(value: str | None) -> str | None:
-            if value is None:
-                return None
-            if not isinstance(value, str):
-                value = str(value)
-            # Remove NUL bytes that Postgres text cannot store
-            value = value.replace("\x00", "")
-            return value
-
-        html_body = _sanitize(html_body) or ""
-        md_body = _sanitize(md_body)
-        with Session(engine) as session:  # type: ignore[arg-type]
-            doc = Document(id=uid, source_type=source_type, html_body=html_body, md_body=md_body)
+        # Sanitize text
+        html_body = (html_body or "").replace("\x00", "")
+        if md_body:
+            md_body = md_body.replace("\x00", "")
+        
+        with Session(self.engine) as session:
+            doc = Document(
+                id=uid,
+                source_type=source_type,
+                html_body=html_body,
+                md_body=md_body
+            )
             session.add(doc)
             session.commit()
+            self.logger.info(
+                "Inserted document uid=%s source_type=%s html_len=%s md_len=%s",
+                uid,
+                source_type,
+                len(html_body),
+                (len(md_body) if md_body else 0),
+            )
 
+    def _redact(self, url: str) -> str:
+        # Avoid leaking credentials in logs
+        try:
+            if "@" in url and "://" in url:
+                scheme, rest = url.split("://", 1)
+                if "@" in rest:
+                    creds, host = rest.split("@", 1)
+                    if ":" in creds:
+                        user, _ = creds.split(":", 1)
+                    else:
+                        user = creds
+                    return f"{scheme}://{user}:***@{host}"
+        except Exception:
+            pass
+        return url
 
 def make_meta_store() -> Optional[MetaStore]:
     url = os.environ.get("DATABASE_URL")
     if not url:
         return None
     return MetaStore(engine_url=url)
-
-

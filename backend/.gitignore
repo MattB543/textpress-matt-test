@@ -18,4 +18,5 @@ htmlcov/
 # Uvicorn reload cache
 *.pid
 
-
+# Textpress CLI workspace
+textpress/
