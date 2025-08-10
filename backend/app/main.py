@@ -68,11 +68,36 @@ async def log_requests(request: Request, call_next):
     return response
 
 meta_store: Optional[MetaStore] = make_meta_store()
+if meta_store is None:
+    logger.warning("Meta store not configured: set DATABASE_URL to enable persistence")
+else:
+    # Log a safe, redacted version of the DB URL host:port for diagnostics
+    try:
+        from urllib.parse import urlparse
+
+        u = urlparse(os.environ.get("DATABASE_URL", ""))
+        safe_loc = f"{u.hostname}:{u.port}" if u.hostname else "?"
+        logger.info("Meta store initialized (db=%s)", safe_loc)
+        # Proactively test connection with short timeout
+        try:
+            meta_store.test_connection()  # type: ignore[attr-defined]
+            logger.info("Database connectivity: ok")
+        except Exception:
+            logger.exception("Database connectivity: FAILED")
+    except Exception:
+        logger.exception("Error while logging DB diagnostics")
 
 
 @app.get("/healthz")
 def healthz() -> dict:
-    return {"ok": True}
+    db_ok = None
+    if meta_store is not None:
+        try:
+            meta_store.test_connection()  # type: ignore[attr-defined]
+            db_ok = True
+        except Exception:
+            db_ok = False
+    return {"ok": True, "db": db_ok}
 
 
 @app.post("/api/convert", response_model=ConvertResponse)
