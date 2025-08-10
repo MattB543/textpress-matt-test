@@ -6,8 +6,6 @@ import tempfile
 import uuid
 from pathlib import Path
 from typing import Optional
-
-import boto3
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
