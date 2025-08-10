@@ -3,6 +3,7 @@ FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
 WORKDIR /app
 COPY pyproject.toml /app/pyproject.toml
+COPY uv.lock /app/uv.lock
 COPY app /app/app
 
 # System libs commonly required by markdown/html tooling (weasyprint/opencv/fonts etc.)
@@ -14,8 +15,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 ENV UV_LINK_MODE=copy
-# Allow resolution at build time (no uv.lock required)
-RUN uv sync
+# Install dependencies exactly as pinned in uv.lock
+RUN uv sync --frozen
 
 ENV PORT=8000
 EXPOSE 8000

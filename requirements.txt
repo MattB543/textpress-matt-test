@@ -1,0 +1,4 @@
+# Ensure source-based deploy platforms that expect a root requirements.txt
+# install the backend dependencies.
+-r backend/requirements.txt
+
