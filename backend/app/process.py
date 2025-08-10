@@ -89,12 +89,36 @@ async def convert_and_render(input_path_or_url: Path | str) -> ConvertResult:
         md_item = result.get_by_format(Format.markdown, Format.md_html)
         html_item = result.get_by_format(Format.html)
 
-        html = html_item.body or ""
-        markdown = md_item.body if md_item.format in {Format.markdown, Format.md_html} else None
+        def _to_text(value) -> str:
+            if value is None:
+                return ""
+            if isinstance(value, bytes):
+                try:
+                    return value.decode("utf-8", errors="replace")
+                except Exception:
+                    return value.decode(errors="ignore")
+            if not isinstance(value, str):
+                try:
+                    value = str(value)
+                except Exception:
+                    value = ""
+            # Remove NUL bytes which Postgres cannot store
+            return value.replace("\x00", "")
+
+        html = _to_text(getattr(html_item, "body", ""))
+        markdown = _to_text(getattr(md_item, "body", None)) if md_item.format in {Format.markdown, Format.md_html} else None
 
         source_type = (
             "url" if is_url(str(input_path_or_url)) else Path(input_path_or_url).suffix.lower().lstrip(".")
         )
+        # Minify HTML to reduce DB payload size
+        try:
+            from htmlmin import minify as html_minify  # type: ignore
+            minified_html = html_minify(html, remove_empty_space=True)
+            html = minified_html if minified_html else html
+        except Exception:
+            # Proceed without minification on any failure
+            pass
         logger.info("Textpress conversion done: html_len=%d md_len=%s", len(html), (len(markdown) if markdown else None))
         return ConvertResult(html=html, markdown=markdown, source_type=source_type or "unknown")
     else:
@@ -105,7 +129,16 @@ async def convert_and_render(input_path_or_url: Path | str) -> ConvertResult:
         p = Path(input_path_or_url)
         md = p.read_text(encoding="utf-8", errors="ignore")
         result = simple_format_markdown(md)
-        logger.info("Fallback conversion done: html_len=%d md_len=%d", len(result.html), len(result.markdown))
-        return ConvertResult(html=result.html, markdown=result.markdown, source_type=result.source_type)
+        # Minify HTML in fallback as well
+        html_fallback = result.html
+        try:
+            from htmlmin import minify as html_minify  # type: ignore
+            html_min = html_minify(html_fallback, remove_empty_space=True)
+            if html_min:
+                html_fallback = html_min
+        except Exception:
+            pass
+        logger.info("Fallback conversion done: html_len=%d md_len=%d", len(html_fallback), len(result.markdown))
+        return ConvertResult(html=html_fallback, markdown=result.markdown, source_type=result.source_type)
 
 

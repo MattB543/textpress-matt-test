@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, String, Text, create_engine, func
+from sqlalchemy import Column, DateTime, String, Text, create_engine, func, event
 from sqlalchemy.orm import DeclarativeBase, Session
 
 
@@ -44,6 +44,27 @@ class MetaStore:
                 pool_pre_ping=True,
                 connect_args={"connect_timeout": 5},
             )
+            # Ensure a reasonable statement timeout to avoid long-running inserts (ms)
+            try:
+                import os
+
+                timeout_ms = int(os.environ.get("PG_STATEMENT_TIMEOUT_MS", "120000"))
+
+                @event.listens_for(self._engine, "connect")
+                def _set_pg_statement_timeout(dbapi_connection, connection_record):  # type: ignore[no-redef]
+                    try:
+                        cursor = dbapi_connection.cursor()
+                        cursor.execute(f"SET statement_timeout TO {timeout_ms}")
+                        cursor.close()
+                    except Exception:
+                        # Best-effort; if it fails, continue without altering server setting
+                        try:
+                            cursor.close()
+                        except Exception:
+                            pass
+            except Exception:
+                # Ignore failures setting timeout
+                pass
             # Ensure tables exist once per process
             Base.metadata.create_all(self._engine)
         return self._engine
@@ -63,6 +84,18 @@ class MetaStore:
         md_body: str | None,
     ) -> None:
         engine = self._get_engine()
+        # Sanitize text to avoid DB text encoding issues (e.g., NUL bytes)
+        def _sanitize(value: str | None) -> str | None:
+            if value is None:
+                return None
+            if not isinstance(value, str):
+                value = str(value)
+            # Remove NUL bytes that Postgres text cannot store
+            value = value.replace("\x00", "")
+            return value
+
+        html_body = _sanitize(html_body) or ""
+        md_body = _sanitize(md_body)
         with Session(engine) as session:  # type: ignore[arg-type]
             doc = Document(id=uid, source_type=source_type, html_body=html_body, md_body=md_body)
             session.add(doc)
