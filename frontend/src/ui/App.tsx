@@ -1,11 +1,10 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DropZone } from "./DropZone";
 import { InputTabs } from "./InputTabs";
 import { api } from "../utils/api";
 
-type Mode = "file" | "text" | "url";
-
 export function App() {
+  type Mode = "file" | "text" | "url";
   const [mode, setMode] = useState<Mode>("file");
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState("");
@@ -13,6 +12,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const reset = () => {
     setError(null);
@@ -22,7 +22,7 @@ export function App() {
   async function onSubmit() {
     reset();
     try {
-      // Basic client-side validation
+      // Validate based on selected mode
       if (mode === "file") {
         if (!file) throw new Error("Please select a .docx/.md/.txt file");
         if (file.size > 15 * 1024 * 1024)
@@ -50,47 +50,73 @@ export function App() {
     }
   }
 
+  const autoResize = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.max(el.scrollHeight, 160) + "px";
+  }, []);
+
+  useEffect(() => {
+    autoResize();
+  }, [text, autoResize]);
+
   return (
-    <div className="container">
-      <header>
-        <div className="title">Textpress</div>
-        <div className="subtitle">Simple publishing for complex docs</div>
-      </header>
+    <>
+      <div className="textpress-header">
+        <div className="inner">
+          <div className="logo">
+            Text<span className="accent">press</span>
+          </div>
+          <div className="tagline">Simple publishing for complex docs</div>
+        </div>
+      </div>
 
-      <div className="card">
-        <InputTabs mode={mode} onChange={setMode} />
-
-        <div className="grid">
-          {mode === "file" && (
-            <DropZone
-              onFile={setFile}
-              accept={[".docx", ".md", ".markdown", ".txt"]}
-            />
-          )}
-
-          {mode === "text" && (
-            <textarea
-              className="textarea"
-              placeholder="Paste or type your text or Markdown..."
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
-          )}
-
-          {mode === "url" && (
-            <input
-              className="input"
-              placeholder="https://example.com/article.html"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-          )}
+      <div className="container">
+        <div className="tabs-panel">
+          <InputTabs mode={mode} onChange={setMode} />
+          <div className="panel">
+            {mode === "url" && (
+              <input
+                className="input"
+                placeholder="https://example.com/article.html"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+              />
+            )}
+            {mode === "file" && (
+              <div>
+                <DropZone
+                  onFile={setFile}
+                  accept={[".docx", ".md", ".markdown", ".txt"]}
+                />
+                {file && (
+                  <div className="muted" style={{ marginTop: 6 }}>
+                    Selected: {file.name}
+                  </div>
+                )}
+              </div>
+            )}
+            {mode === "text" && (
+              <textarea
+                ref={textareaRef}
+                className="textarea"
+                placeholder="Paste or type your text or Markdown..."
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onInput={autoResize}
+                style={{ overflow: "hidden" }}
+              />
+            )}
+          </div>
         </div>
 
-        <div className="spacer" />
-
-        <div className="row">
-          <button className="button" onClick={onSubmit} disabled={busy}>
+        <div className="row cta">
+          <button
+            className="btn btn-primary"
+            onClick={onSubmit}
+            disabled={busy}
+          >
             {busy ? "Converting…" : "Convert & Publish"}
           </button>
         </div>
@@ -107,6 +133,6 @@ export function App() {
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }

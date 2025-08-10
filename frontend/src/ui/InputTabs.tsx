@@ -8,24 +8,30 @@ export function InputTabs({
   onChange: (m: Mode) => void;
 }) {
   return (
-    <div className="tabs">
+    <div className="tabs" role="tablist" aria-label="Input mode">
       <button
         className={`tab-btn ${mode === "file" ? "active" : ""}`}
+        role="tab"
+        aria-selected={mode === "file"}
         onClick={() => onChange("file")}
       >
-        File
-      </button>
-      <button
-        className={`tab-btn ${mode === "text" ? "active" : ""}`}
-        onClick={() => onChange("text")}
-      >
-        Text
+        Upload File
       </button>
       <button
         className={`tab-btn ${mode === "url" ? "active" : ""}`}
+        role="tab"
+        aria-selected={mode === "url"}
         onClick={() => onChange("url")}
       >
-        URL
+        Paste URL
+      </button>
+      <button
+        className={`tab-btn ${mode === "text" ? "active" : ""}`}
+        role="tab"
+        aria-selected={mode === "text"}
+        onClick={() => onChange("text")}
+      >
+        Paste Text
       </button>
     </div>
   );

@@ -19,6 +19,7 @@ RUN uv sync
 
 ENV PORT=8000
 EXPOSE 8000
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use shell form so $PORT from the platform is honored (fallback to 8000 locally)
+CMD ["sh", "-c", "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
 
 
